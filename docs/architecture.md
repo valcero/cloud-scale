@@ -2,7 +2,7 @@
 
 ## System Overview
 
-CloudScale is a production-grade AWS DevOps platform consisting of four microservices deployed on Kubernetes (EKS), with full observability, CI/CD automation, and a real-time data pipeline.
+CloudScale is a production-grade DevOps platform demonstrating microservices, Kubernetes, IaC, CI/CD, observability, and data pipelines. It runs entirely locally for free using Docker Compose, LocalStack, and Minikube.
 
 ## Architecture Diagram
 
@@ -10,57 +10,45 @@ CloudScale is a production-grade AWS DevOps platform consisting of four microser
 ┌──────────────┐     ┌──────────────────────────────────────────────────────┐
 │   Developer  │     │                    GitHub                            │
 │   pushes     │────▶│  ┌─────────────────────────────────────────────┐     │
-│   code       │     │  │           GitHub Actions CI/CD              │     │
-└──────────────┘     │  │  Lint → Test → Build → Push → Deploy       │     │
+│   code       │     │  │     GitHub Actions CI (free tier)           │     │
+└──────────────┘     │  │  Lint → Test → Build → Validate            │     │
                      │  └──────────────────┬──────────────────────────┘     │
                      └─────────────────────┼───────────────────────────────┘
                                            │
-                     ┌─────────────────────▼───────────────────────────────┐
-                     │                Amazon ECR                           │
-                     │  auth-service │ order-service │ payment │ analytics │
-                     └─────────────────────┬───────────────────────────────┘
-                                           │
           ┌────────────────────────────────▼──────────────────────────────┐
-          │                     AWS EKS Cluster                           │
+          │           Docker Compose / Minikube (free, local)             │
           │                                                               │
           │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │
           │  │ auth-service │  │ order-service │  │payment-service│       │
           │  │  (port 3001) │  │  (port 3002)  │  │  (port 3003) │       │
           │  └──────┬───────┘  └──────┬────────┘  └──────┬───────┘       │
           │         │                 │                    │               │
-          │  ┌──────▼─────────────────▼────────────────────▼──────┐       │
-          │  │              AWS ALB Ingress Controller             │       │
-          │  └────────────────────────────────────────────────────┘       │
-          │                                                               │
           │  ┌──────────────────┐                                         │
           │  │analytics-service │──────┐                                  │
           │  │  (port 3004)     │      │                                  │
           │  └──────────────────┘      │                                  │
-          │                            │                                  │
-          │  ┌─────────────────────────▼──────────────────────────┐       │
-          │  │            Observability Stack                      │       │
-          │  │  Prometheus │ Grafana │ FluentBit │ OpenSearch      │       │
-          │  └────────────────────────────────────────────────────┘       │
-          └───────────────────────────────────────────────────────────────┘
-                                           │
-          ┌────────────────────────────────▼──────────────────────────────┐
-          │                    Data Pipeline                              │
+          │                            ▼                                  │
+          │  ┌─────────────────────────────────────────────────────┐      │
+          │  │          LocalStack (free AWS emulation)            │      │
+          │  │  Kinesis Stream │ S3 Data Lake │ Lambda             │      │
+          │  └─────────────────────────────────────────────────────┘      │
           │                                                               │
-          │  App Events ──▶ Kinesis Stream ──▶ Lambda ──▶ S3 Data Lake   │
-          │                                                    │          │
-          │                                              Athena / Redshift│
+          │  ┌─────────────────────────────────────────────────────┐      │
+          │  │            Observability Stack (free)               │      │
+          │  │  Prometheus │ Grafana │ OpenSearch + Dashboards     │      │
+          │  └─────────────────────────────────────────────────────┘      │
           └───────────────────────────────────────────────────────────────┘
                                            │
           ┌────────────────────────────────▼──────────────────────────────┐
-          │                    Data Layer                                  │
-          │  RDS Aurora PostgreSQL (Multi-AZ, Encrypted)                  │
+          │                    Data Layer (free)                          │
+          │  PostgreSQL 16 (Docker container)                             │
           │  Tables: users │ orders │ transactions │ events               │
           └───────────────────────────────────────────────────────────────┘
 ```
 
-## Network Architecture
+## Network Architecture (Reference Design)
 
-### VPC Design (10.0.0.0/16)
+The Terraform modules in `terraform/vpc/` demonstrate a production-ready AWS VPC:
 
 | Subnet Type | CIDR Range | AZ | Purpose |
 |-------------|------------|-----|---------|
@@ -71,17 +59,7 @@ CloudScale is a production-grade AWS DevOps platform consisting of four microser
 | Private-2 | 10.0.64.0/20 | us-east-1b | EKS nodes, RDS |
 | Private-3 | 10.0.80.0/20 | us-east-1c | EKS nodes, RDS |
 
-### Security Groups
-
-- **EKS Cluster SG**: Port 443 inbound (API server)
-- **EKS Node SG**: Inter-node communication, kubelet
-- **RDS SG**: Port 5432 from VPC CIDR only
-- **ALB SG**: Ports 80/443 from 0.0.0.0/0
-
-### Network ACLs
-
-- **Public NACL**: Allow all inbound/outbound
-- **Private NACL**: Allow VPC CIDR inbound, ephemeral ports from 0.0.0.0/0
+These modules exist as portfolio-ready IaC that can be applied to real AWS if desired.
 
 ## Microservices
 
@@ -93,7 +71,7 @@ CloudScale is a production-grade AWS DevOps platform consisting of four microser
 
 ### Order Service (port 3002)
 - CRUD operations for orders
-- Status lifecycle management
+- Status lifecycle management (pending → confirmed → shipped → delivered)
 - JWT-authenticated endpoints
 
 ### Payment Service (port 3003)
@@ -103,69 +81,70 @@ CloudScale is a production-grade AWS DevOps platform consisting of four microser
 
 ### Analytics Service (port 3004)
 - Event ingestion (single + batch)
-- Kinesis integration for real-time streaming
+- Kinesis integration via LocalStack
 - Aggregated statistics API
 
 ## Database Schema
 
 ```sql
--- Users table (auth-service)
+-- users (auth-service)
 users: id, email, password_hash, role, created_at, updated_at
 
--- Orders table (order-service)
+-- orders (order-service)
 orders: id (UUID), user_id, items (JSONB), total, status, created_at, updated_at
 
--- Transactions table (payment-service)
+-- transactions (payment-service)
 transactions: id (UUID), order_id, user_id, amount, currency, status, payment_method, created_at, updated_at
 
--- Events table (analytics-service)
+-- events (analytics-service)
 events: id (UUID), event_type, source, user_id, payload (JSONB), created_at
 ```
 
 ## Data Pipeline
 
 ```
-Microservices → Kinesis Data Stream (2 shards, 72h retention)
+Microservices → Kinesis Data Stream (LocalStack)
                         │
                         ▼
-              Lambda Event Processor
-              (batch size: 100, 10x parallelization)
+              Lambda Event Processor (LocalStack)
                         │
                         ▼
-              S3 Data Lake (partitioned by event_type/year/month/day/hour)
+              S3 Data Lake (LocalStack, partitioned by event_type/date)
                         │
-                    ┌───┴───┐
-                    ▼       ▼
-                Athena   Redshift
-              (ad-hoc)  (warehouse)
+                        ▼
+              Athena Queries (reference SQL provided)
 ```
 
 ## Observability
 
 ### Metrics Pipeline
 - **Collection**: prom-client in each service exposes /metrics
-- **Scraping**: Prometheus scrapes all pods with `prometheus.io/scrape: "true"`
-- **Visualization**: Grafana dashboards (auto-provisioned)
-- **Alerting**: Prometheus alerting rules for SLOs
+- **Scraping**: Prometheus scrapes all 4 services
+- **Visualization**: Grafana with auto-provisioned CloudScale dashboard
+- **Alerting**: Reference alerting rules for production use
 
 ### Logging Pipeline
-- **Collection**: FluentBit DaemonSet tails container logs
-- **Processing**: Kubernetes metadata enrichment
-- **Storage**: OpenSearch cluster (3 nodes, 50GB each)
-- **Visualization**: OpenSearch Dashboards
+- **Storage**: OpenSearch single-node cluster
+- **Visualization**: OpenSearch Dashboards (port 5601)
 
-### Key Alerts
-| Alert | Condition | Severity |
-|-------|-----------|----------|
-| ServiceDown | up == 0 for 1m | Critical |
-| HighCPUUsage | CPU > 80% for 5m | Warning |
-| HighErrorRate | 5xx > 5% for 5m | Critical |
-| HighLatency | P99 > 2s for 5m | Warning |
-| PodCrashLooping | Restarts in 15m | Critical |
+### Grafana Dashboard
+Pre-configured to show:
+- Request rates per service
+- Error rates (5xx)
+- CPU and memory usage
+- P99 response times
 
-## Scaling
+## IaC Modules
 
-- **HPA**: CPU/Memory-based autoscaling per service
-- **Node Group**: 2-10 nodes (t3.large), ON_DEMAND
-- **Database**: Aurora PostgreSQL with read replicas
-- **Kinesis**: 2 shards (expandable)
+| Module | Runs Locally | Purpose |
+|--------|-------------|---------|
+| `terraform/s3/` | Yes (LocalStack) | S3 data lake + Athena results bucket |
+| `terraform/kinesis/` | Yes (LocalStack) | Kinesis event stream |
+| `terraform/vpc/` | Reference only | Production VPC design |
+| `terraform/eks/` | Reference only | EKS cluster configuration |
+| `terraform/rds/` | Reference only | Aurora PostgreSQL setup |
+| `terraform/ecr/` | Reference only | Container registry |
+
+## Cost
+
+**$0.** Everything runs locally using free, open-source tools.

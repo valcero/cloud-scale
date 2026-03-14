@@ -7,7 +7,7 @@ metadata:
     app: order-service
     version: v1
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: order-service
@@ -29,7 +29,8 @@ spec:
       serviceAccountName: order-service
       containers:
         - name: order-service
-          image: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cloudscale/order-service:latest
+          image: cloudscale/order-service:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 3002
               protocol: TCP
@@ -40,11 +41,11 @@ spec:
                 name: order-service-secrets
           resources:
             requests:
-              cpu: 100m
-              memory: 128Mi
+              cpu: 50m
+              memory: 64Mi
             limits:
-              cpu: 500m
-              memory: 512Mi
+              cpu: 250m
+              memory: 256Mi
           livenessProbe:
             httpGet:
               path: /health/live
@@ -57,15 +58,3 @@ spec:
               port: 3002
             initialDelaySeconds: 10
             periodSeconds: 10
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector:
-                  matchExpressions:
-                    - key: app
-                      operator: In
-                      values:
-                        - order-service
-                topologyKey: kubernetes.io/hostname

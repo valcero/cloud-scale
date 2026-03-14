@@ -7,7 +7,7 @@ metadata:
     app: auth-service
     version: v1
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: auth-service
@@ -29,7 +29,8 @@ spec:
       serviceAccountName: auth-service
       containers:
         - name: auth-service
-          image: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cloudscale/auth-service:latest
+          image: cloudscale/auth-service:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 3001
               protocol: TCP
@@ -40,11 +41,11 @@ spec:
                 name: auth-service-secrets
           resources:
             requests:
-              cpu: 100m
-              memory: 128Mi
+              cpu: 50m
+              memory: 64Mi
             limits:
-              cpu: 500m
-              memory: 512Mi
+              cpu: 250m
+              memory: 256Mi
           livenessProbe:
             httpGet:
               path: /health/live
@@ -61,15 +62,3 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector:
-                  matchExpressions:
-                    - key: app
-                      operator: In
-                      values:
-                        - auth-service
-                topologyKey: kubernetes.io/hostname

@@ -7,7 +7,7 @@ metadata:
     app: analytics-service
     version: v1
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: analytics-service
@@ -29,7 +29,8 @@ spec:
       serviceAccountName: analytics-service
       containers:
         - name: analytics-service
-          image: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cloudscale/analytics-service:latest
+          image: cloudscale/analytics-service:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 3004
               protocol: TCP
@@ -40,11 +41,11 @@ spec:
                 name: analytics-service-secrets
           resources:
             requests:
-              cpu: 200m
-              memory: 256Mi
+              cpu: 50m
+              memory: 64Mi
             limits:
-              cpu: 1000m
-              memory: 1Gi
+              cpu: 250m
+              memory: 256Mi
           livenessProbe:
             httpGet:
               path: /health/live
@@ -57,15 +58,3 @@ spec:
               port: 3004
             initialDelaySeconds: 10
             periodSeconds: 10
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector:
-                  matchExpressions:
-                    - key: app
-                      operator: In
-                      values:
-                        - analytics-service
-                topologyKey: kubernetes.io/hostname

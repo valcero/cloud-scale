@@ -1,44 +1,4 @@
-module "vpc" {
-  source = "./vpc"
-
-  project_name       = var.project_name
-  environment        = var.environment
-  vpc_cidr           = var.vpc_cidr
-  availability_zones = var.availability_zones
-}
-
-module "ecr" {
-  source = "./ecr"
-
-  project_name = var.project_name
-  environment  = var.environment
-}
-
-module "eks" {
-  source = "./eks"
-
-  project_name       = var.project_name
-  environment        = var.environment
-  vpc_id             = module.vpc.vpc_id
-  private_subnet_ids = module.vpc.private_subnet_ids
-  public_subnet_ids  = module.vpc.public_subnet_ids
-
-  depends_on = [module.vpc]
-}
-
-module "rds" {
-  source = "./rds"
-
-  project_name       = var.project_name
-  environment        = var.environment
-  vpc_id             = module.vpc.vpc_id
-  private_subnet_ids = module.vpc.private_subnet_ids
-  db_username        = var.db_username
-  db_password        = var.db_password
-
-  depends_on = [module.vpc]
-}
-
+# ─── S3 Buckets (runs on LocalStack - FREE) ─────────────
 module "s3" {
   source = "./s3"
 
@@ -46,9 +6,26 @@ module "s3" {
   environment  = var.environment
 }
 
+# ─── Kinesis Stream (runs on LocalStack - FREE) ─────────
 module "kinesis" {
   source = "./kinesis"
 
   project_name = var.project_name
   environment  = var.environment
 }
+
+# ─── NOTE: VPC, EKS, RDS, ECR ───────────────────────────
+# These modules are kept for reference and portfolio
+# demonstration. In this local setup they are not applied
+# because we use:
+#   - Docker Compose instead of EKS
+#   - PostgreSQL container instead of RDS
+#   - Local Docker images instead of ECR
+#   - Docker networking instead of VPC
+#
+# To showcase IaC knowledge, the full Terraform modules
+# remain in their respective folders:
+#   terraform/vpc/   - VPC, subnets, NAT, IGW, NACLs
+#   terraform/eks/   - EKS cluster, node groups, OIDC
+#   terraform/rds/   - Aurora PostgreSQL cluster
+#   terraform/ecr/   - ECR repositories with lifecycle

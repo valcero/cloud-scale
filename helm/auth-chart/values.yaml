@@ -1,9 +1,9 @@
-replicaCount: 3
+replicaCount: 1
 
 image:
-  repository: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cloudscale/auth-service
+  repository: cloudscale/auth-service
   tag: latest
-  pullPolicy: IfNotPresent
+  pullPolicy: Never
 
 service:
   type: ClusterIP
@@ -12,10 +12,8 @@ service:
 
 ingress:
   enabled: true
-  className: alb
-  annotations:
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/target-type: ip
+  className: nginx
+  annotations: {}
   hosts:
     - host: api.cloudscale.example.com
       paths:
@@ -24,14 +22,14 @@ ingress:
 
 resources:
   requests:
-    cpu: 100m
-    memory: 128Mi
+    cpu: 50m
+    memory: 64Mi
   limits:
-    cpu: 500m
-    memory: 512Mi
+    cpu: 250m
+    memory: 256Mi
 
 autoscaling:
-  enabled: true
+  enabled: false
   minReplicas: 2
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70

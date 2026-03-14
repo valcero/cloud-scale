@@ -1,228 +1,225 @@
 # CloudScale Deployment Guide
 
+Everything runs locally for free. No AWS account needed.
+
 ## Prerequisites
 
-| Tool | Version | Purpose |
-|------|---------|---------|
-| AWS CLI | >= 2.x | AWS resource management |
-| Terraform | >= 1.5 | Infrastructure provisioning |
-| kubectl | >= 1.28 | Kubernetes management |
-| Helm | >= 3.12 | Application deployment |
-| Docker | >= 24.0 | Container builds |
-| Node.js | >= 20 LTS | Service development |
+| Tool | Install | Cost |
+|------|---------|------|
+| Docker Desktop | [docker.com](https://www.docker.com/products/docker-desktop/) | Free |
+| Terraform | [hashicorp.com](https://developer.hashicorp.com/terraform/downloads) or `choco install terraform` | Free |
+| Minikube (optional) | `choco install minikube` or [minikube.sigs.k8s.io](https://minikube.sigs.k8s.io/) | Free |
+| Helm (optional) | `choco install kubernetes-helm` | Free |
+| Node.js 20 | [nodejs.org](https://nodejs.org/) (for development) | Free |
 
-## Step 1: AWS Configuration
+## Method 1: Docker Compose (Recommended)
 
-```bash
-aws configure
-# Set: AWS Access Key ID, Secret Access Key, Region (us-east-1), Output (json)
+The fastest way to get the full platform running.
+
+### Start
+
+```powershell
+# Windows
+.\scripts\start-local.ps1
+
+# Linux/Mac
+./scripts/start-local.sh
 ```
 
-Ensure your IAM user/role has permissions for: EKS, ECR, VPC, RDS, S3, Kinesis, Lambda, CloudWatch, IAM.
-
-## Step 2: Provision Infrastructure with Terraform
+Or manually:
 
 ```bash
-cd terraform
+cd docker
+docker-compose up -d
+```
 
-# Copy and configure variables
+### What runs
+
+- **PostgreSQL** (port 5432) – database
+- **LocalStack** (port 4566) – free AWS emulator (S3, Kinesis, Lambda)
+- **auth-service** (port 3001) – user auth
+- **order-service** (port 3002) – orders
+- **payment-service** (port 3003) – payments
+- **analytics-service** (port 3004) – events & analytics
+- **Prometheus** (port 9090) – metrics
+- **Grafana** (port 3000) – dashboards (login: admin/admin)
+- **OpenSearch** (port 9200) – log storage
+- **OpenSearch Dashboards** (port 5601) – log viewer
+
+### Verify
+
+```bash
+# Health checks
+curl http://localhost:3001/health/live
+curl http://localhost:3002/health/live
+curl http://localhost:3003/health/live
+curl http://localhost:3004/health/live
+
+# Register + Login
+curl -X POST http://localhost:3001/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@demo.com","password":"test123"}'
+
+# Check Prometheus is scraping services
+# Open http://localhost:9090/targets
+
+# Check Grafana dashboard
+# Open http://localhost:3000 (admin/admin)
+
+# Check LocalStack
+curl http://localhost:4566/_localstack/health
+```
+
+### Stop
+
+```powershell
+.\scripts\stop-local.ps1
+# or
+cd docker && docker-compose down
+
+# Remove all data volumes too:
+cd docker && docker-compose down -v
+```
+
+## Method 2: Terraform + LocalStack
+
+Demonstrates IaC skills without any AWS cost.
+
+```bash
+# Make sure LocalStack is running (from docker-compose)
+cd docker && docker-compose up -d localstack
+
+# Apply Terraform against LocalStack
+cd ../terraform
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your values
-
-# Initialize and apply
 terraform init
-terraform plan -out=tfplan
-terraform apply tfplan
+terraform apply -auto-approve
+
+# Verify resources were created
+aws --endpoint-url=http://localhost:4566 s3 ls
+aws --endpoint-url=http://localhost:4566 kinesis list-streams
 ```
 
-This creates:
-- VPC with public/private subnets across 3 AZs
-- NAT Gateways, Internet Gateway, Route Tables
-- EKS cluster with managed node group
-- Aurora PostgreSQL cluster (2 instances)
-- S3 buckets (data lake + Athena results)
-- Kinesis data stream
-- ECR repositories for all 4 services
+## Method 3: Minikube (Full Kubernetes Experience)
 
-## Step 3: Configure kubectl
+Free local Kubernetes cluster.
+
+### Setup
 
 ```bash
-aws eks update-kubeconfig --name cloudscale-eks-production --region us-east-1
-kubectl get nodes  # verify connectivity
+# Start Minikube
+minikube start --memory=4096 --cpus=2
+
+# Use Minikube's Docker daemon so images are available
+eval $(minikube docker-env)   # Linux/Mac
+# Windows PowerShell: minikube docker-env --shell powershell | Invoke-Expression
+
+# Build all images inside Minikube
+docker build -f docker/Dockerfile.auth-service -t cloudscale/auth-service:latest .
+docker build -f docker/Dockerfile.order-service -t cloudscale/order-service:latest .
+docker build -f docker/Dockerfile.payment-service -t cloudscale/payment-service:latest .
+docker build -f docker/Dockerfile.analytics-service -t cloudscale/analytics-service:latest .
 ```
 
-## Step 4: Build and Push Docker Images
-
-```bash
-# Login to ECR
-AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-aws ecr get-login-password --region us-east-1 | \
-  docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
-
-# Build and push all services
-for svc in auth-service order-service payment-service analytics-service; do
-  docker build -f docker/Dockerfile.${svc} -t ${svc}:latest .
-  docker tag ${svc}:latest ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/cloudscale/${svc}:latest
-  docker push ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/cloudscale/${svc}:latest
-done
-```
-
-## Step 5: Deploy Kubernetes Namespace and Secrets
+### Deploy
 
 ```bash
 # Create namespace
 kubectl apply -f kubernetes/manifests/namespace.yaml
 
-# Update secrets with real values
-# Edit each secret.yaml file with actual RDS endpoint, credentials, JWT secret
-kubectl apply -f kubernetes/manifests/auth-service/secret.yaml
-kubectl apply -f kubernetes/manifests/order-service/secret.yaml
-kubectl apply -f kubernetes/manifests/payment-service/secret.yaml
-kubectl apply -f kubernetes/manifests/analytics-service/secret.yaml
-```
+# Deploy secrets and configmaps
+kubectl apply -f kubernetes/manifests/auth-service/
+kubectl apply -f kubernetes/manifests/order-service/
+kubectl apply -f kubernetes/manifests/payment-service/
+kubectl apply -f kubernetes/manifests/analytics-service/
 
-## Step 6: Deploy Services with Helm
-
-```bash
-# Update image repository in each chart's values.yaml
-AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-
+# Or use Helm
 for chart in auth-chart order-chart payment-chart analytics-chart; do
-  helm upgrade --install ${chart} helm/${chart}/ \
-    --namespace cloudscale \
-    --create-namespace \
-    --set image.repository=${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/cloudscale/$(echo ${chart} | sed 's/-chart/-service/') \
-    --wait --timeout 300s
+  helm upgrade --install ${chart} helm/${chart}/ -n cloudscale
 done
 
-# Verify deployments
-kubectl get pods -n cloudscale
-kubectl get svc -n cloudscale
-```
-
-## Step 7: Deploy Ingress Controller
-
-```bash
-# Install AWS Load Balancer Controller
-helm repo add eks https://aws.github.io/eks-charts
-helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
-  -n kube-system \
-  --set clusterName=cloudscale-eks-production
-
-# Apply ingress
+# Enable nginx ingress on Minikube
+minikube addons enable ingress
 kubectl apply -f kubernetes/manifests/ingress.yaml
+
+# Check pods
+kubectl get pods -n cloudscale
+
+# Access services
+minikube service list -n cloudscale
+kubectl port-forward svc/auth-service 3001:80 -n cloudscale
 ```
 
-## Step 8: Deploy Observability Stack
+### Teardown
 
 ```bash
-# Deploy monitoring namespace, Prometheus, Grafana, FluentBit, OpenSearch
-kubectl apply -f observability/prometheus/
-kubectl apply -f observability/grafana/
-kubectl apply -f observability/fluentbit/
-kubectl apply -f observability/opensearch/
-
-# Verify
-kubectl get pods -n monitoring
+minikube delete
 ```
 
-Access points:
-- **Grafana**: `kubectl get svc grafana -n monitoring` (LoadBalancer external IP, port 80)
-- **OpenSearch Dashboards**: `kubectl get svc opensearch-dashboards -n monitoring` (port 5601)
-- **Prometheus**: `kubectl port-forward svc/prometheus 9090:9090 -n monitoring`
-
-## Step 9: Deploy Data Pipeline
+## Method 4: CI/CD with GitHub Actions (Free)
 
 ```bash
-# Deploy Lambda function
-cd data-pipeline/lambda/event-processor
-sam build
-sam deploy --guided
+# Copy the workflow to your repo root
+mkdir -p .github/workflows
+cp ci-cd/.github/workflows/ci-cd.yaml .github/workflows/
 
-# Create Athena tables
-# Open AWS Athena Console → Query Editor → Run:
-# Paste contents of data-pipeline/athena/create-tables.sql
+# Push to GitHub – pipeline runs automatically
+git add . && git commit -m "Add CloudScale platform" && git push
 ```
 
-## Step 10: Set Up ArgoCD (GitOps)
-
-```bash
-# Install ArgoCD
-kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-
-# Apply CloudScale project and applications
-kubectl apply -f ci-cd/argocd/project.yaml
-kubectl apply -f ci-cd/argocd/application.yaml
-
-# Get ArgoCD admin password
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
-
-# Access ArgoCD UI
-kubectl port-forward svc/argocd-server -n argocd 8080:443
-# Open https://localhost:8080
-```
-
-## Step 11: Configure CI/CD
-
-1. Copy `.github/workflows/ci-cd.yaml` from `ci-cd/` to your repo root
-2. Set GitHub repository secrets:
-   - `AWS_ACCOUNT_ID`
-   - `AWS_ROLE_ARN` (OIDC role for GitHub Actions)
-3. Push to `main` branch to trigger the full pipeline
-
-## Local Development
-
-```bash
-# Start all services locally with Docker Compose
-cd docker
-docker-compose up -d
-
-# Services available at:
-# Auth:      http://localhost:3001
-# Orders:    http://localhost:3002
-# Payments:  http://localhost:3003
-# Analytics: http://localhost:3004
-```
+The pipeline (all free):
+1. Lints code with ESLint
+2. Lints Dockerfiles with Hadolint
+3. Runs unit tests with PostgreSQL service container
+4. Builds Docker images (verification only, no push)
+5. Validates Terraform configuration
 
 ## Verification Checklist
 
-- [ ] All Terraform resources created successfully
-- [ ] kubectl can connect to EKS cluster
-- [ ] All pods in `cloudscale` namespace are Running
-- [ ] ALB is provisioned and accessible
-- [ ] Health endpoints return 200 for all services
-- [ ] Prometheus is scraping service metrics
-- [ ] Grafana dashboard shows data
-- [ ] FluentBit is shipping logs to OpenSearch
-- [ ] Kinesis stream is receiving events
-- [ ] Lambda is processing events to S3
-- [ ] Athena can query the data lake
-- [ ] ArgoCD is syncing applications
-- [ ] GitHub Actions pipeline completes successfully
+- [ ] `docker-compose up -d` starts all containers
+- [ ] All 4 services return 200 on `/health/live`
+- [ ] User registration and login work
+- [ ] Orders can be created with JWT token
+- [ ] Analytics events are ingested
+- [ ] Prometheus shows targets at http://localhost:9090/targets
+- [ ] Grafana dashboard loads at http://localhost:3000
+- [ ] OpenSearch Dashboards loads at http://localhost:5601
+- [ ] LocalStack health returns OK at http://localhost:4566/_localstack/health
+- [ ] `terraform apply` succeeds against LocalStack
+- [ ] Minikube pods reach Running state (if testing K8s)
 
 ## Troubleshooting
 
-### Pods not starting
+### Containers not starting
 ```bash
-kubectl describe pod <pod-name> -n cloudscale
-kubectl logs <pod-name> -n cloudscale
+docker-compose logs auth-service
+docker-compose logs postgres
 ```
 
-### Database connectivity issues
+### Port already in use
 ```bash
-kubectl exec -it <pod-name> -n cloudscale -- nc -zv <rds-endpoint> 5432
+# Find what's using the port
+netstat -ano | findstr :3001
+# Kill the process or change the port in docker-compose.yml
 ```
 
-### ALB not provisioning
+### LocalStack not ready
 ```bash
-kubectl logs -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller
-kubectl describe ingress cloudscale-ingress -n cloudscale
+# Wait longer or check logs
+docker-compose logs localstack
+curl http://localhost:4566/_localstack/health
 ```
 
-### Kinesis issues
+### Minikube out of memory
 ```bash
-aws kinesis describe-stream --stream-name cloudscale-events-production
-aws kinesis get-shard-iterator --stream-name cloudscale-events-production \
-  --shard-id shardId-000000000000 --shard-iterator-type LATEST
+minikube stop
+minikube start --memory=6144 --cpus=4
+```
+
+### Reset everything
+```bash
+cd docker
+docker-compose down -v
+docker system prune -f
+docker-compose up -d
 ```

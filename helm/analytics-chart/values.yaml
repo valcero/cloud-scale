@@ -1,9 +1,9 @@
-replicaCount: 3
+replicaCount: 1
 
 image:
-  repository: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cloudscale/analytics-service
+  repository: cloudscale/analytics-service
   tag: latest
-  pullPolicy: IfNotPresent
+  pullPolicy: Never
 
 service:
   type: ClusterIP
@@ -12,14 +12,14 @@ service:
 
 resources:
   requests:
-    cpu: 200m
-    memory: 256Mi
+    cpu: 50m
+    memory: 64Mi
   limits:
-    cpu: 1000m
-    memory: 1Gi
+    cpu: 250m
+    memory: 256Mi
 
 autoscaling:
-  enabled: true
+  enabled: false
   minReplicas: 2
   maxReplicas: 15
   targetCPUUtilizationPercentage: 65
@@ -32,7 +32,8 @@ config:
   DB_SSL: "true"
   LOG_LEVEL: "info"
   AWS_REGION: "us-east-1"
-  KINESIS_STREAM_NAME: "cloudscale-events-production"
+  KINESIS_ENDPOINT: "http://localstack:4566"
+  KINESIS_STREAM_NAME: "cloudscale-events"
 
 secrets:
   DB_HOST: "REPLACE_WITH_DB_HOST"

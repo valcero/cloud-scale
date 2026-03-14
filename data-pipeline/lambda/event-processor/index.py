@@ -1,5 +1,6 @@
 import json
 import base64
+import os
 import boto3
 import logging
 from datetime import datetime
@@ -8,8 +9,14 @@ from uuid import uuid4
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-s3_client = boto3.client('s3')
-DATA_LAKE_BUCKET = 'cloudscale-data-lake-production'
+# Support LocalStack endpoint for free local development
+s3_kwargs = {}
+endpoint_url = os.environ.get('AWS_ENDPOINT_URL') or os.environ.get('LOCALSTACK_ENDPOINT')
+if endpoint_url:
+    s3_kwargs['endpoint_url'] = endpoint_url
+
+s3_client = boto3.client('s3', **s3_kwargs)
+DATA_LAKE_BUCKET = os.environ.get('DATA_LAKE_BUCKET', 'cloudscale-data-lake')
 
 
 def lambda_handler(event, context):

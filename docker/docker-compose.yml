@@ -1,6 +1,7 @@
 version: "3.9"
 
 services:
+  # ─── Data Layer ───────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     environment:
@@ -17,6 +18,26 @@ services:
       timeout: 5s
       retries: 5
 
+  # ─── AWS Emulation (LocalStack - FREE) ───────────────────
+  localstack:
+    image: localstack/localstack:3.0
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3,kinesis,lambda,sts,iam
+      DEFAULT_REGION: us-east-1
+      DOCKER_HOST: unix:///var/run/docker.sock
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./localstack-init:/etc/localstack/init/ready.d
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ─── Microservices ───────────────────────────────────────
   auth-service:
     build:
       context: ..
@@ -31,6 +52,7 @@ services:
       DB_USER: cloudscale_admin
       DB_PASSWORD: localdev123
       JWT_SECRET: local-dev-secret
+      LOG_LEVEL: info
     depends_on:
       postgres:
         condition: service_healthy
@@ -49,6 +71,7 @@ services:
       DB_USER: cloudscale_admin
       DB_PASSWORD: localdev123
       JWT_SECRET: local-dev-secret
+      LOG_LEVEL: info
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,6 +90,7 @@ services:
       DB_USER: cloudscale_admin
       DB_PASSWORD: localdev123
       JWT_SECRET: local-dev-secret
+      LOG_LEVEL: info
     depends_on:
       postgres:
         condition: service_healthy
@@ -85,11 +109,70 @@ services:
       DB_USER: cloudscale_admin
       DB_PASSWORD: localdev123
       JWT_SECRET: local-dev-secret
+      LOG_LEVEL: info
       AWS_REGION: us-east-1
-      KINESIS_STREAM_NAME: cloudscale-events-production
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      KINESIS_STREAM_NAME: cloudscale-events
+      KINESIS_ENDPOINT: http://localstack:4566
     depends_on:
       postgres:
         condition: service_healthy
+      localstack:
+        condition: service_healthy
+
+  # ─── Observability (all FREE) ────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../observability/prometheus/local-prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+
+  grafana:
+    image: grafana/grafana:10.2.2
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-clock-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning
+      - ../observability/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+
+  opensearch:
+    image: opensearchproject/opensearch:2.11.0
+    ports:
+      - "9200:9200"
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms256m -Xmx256m"
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.11.0
+    ports:
+      - "5601:5601"
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
+    depends_on:
+      - opensearch
 
 volumes:
   postgres_data:
+  localstack_data:
+  prometheus_data:
+  grafana_data:
+  opensearch_data:

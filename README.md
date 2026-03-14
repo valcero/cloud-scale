@@ -1,25 +1,23 @@
 # CloudScale – Production-Grade AWS DevOps Platform
 
-A fully automated cloud-native platform that deploys microservices on Kubernetes (EKS) using Terraform, CI/CD pipelines, GitOps (ArgoCD), observability, and data pipelines.
+A fully automated cloud-native platform demonstrating microservices on Kubernetes, Infrastructure as Code with Terraform, CI/CD pipelines, GitOps, observability, and data pipelines.
+
+**Runs 100% locally for free** using Docker Compose, LocalStack (AWS emulator), and Minikube.
 
 ## Architecture
 
 ```
 Developer pushes code → GitHub
         ↓
-  GitHub Actions CI Pipeline
+  GitHub Actions CI Pipeline (free tier)
         ↓
-  Build Docker Image → Push to Amazon ECR
+  Lint → Test → Build Docker Images
         ↓
-  Terraform deploys infrastructure
-        ↓
-  EKS Kubernetes Cluster ← Helm deploys microservices
-        ↓
-  ArgoCD GitOps continuous delivery
+  Kubernetes (Minikube local) ← Helm deploys microservices
         ↓
   Observability: Prometheus + Grafana (metrics), FluentBit → OpenSearch (logs)
         ↓
-  Data Pipeline: App events → Kinesis → Lambda → S3 → Athena/Redshift
+  Data Pipeline: App events → Kinesis (LocalStack) → Lambda → S3 (LocalStack)
 ```
 
 ## Services
@@ -31,105 +29,166 @@ Developer pushes code → GitHub
 | payment-service   | 3003 | Payment processing                |
 | analytics-service | 3004 | Event ingestion & analytics       |
 
+## Quick Start (One Command)
+
+### Prerequisites
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (free)
+- [Terraform](https://developer.hashicorp.com/terraform/downloads) (free)
+
+### Windows (PowerShell)
+
+```powershell
+.\scripts\start-local.ps1
+```
+
+### Linux / macOS
+
+```bash
+chmod +x scripts/start-local.sh
+./scripts/start-local.sh
+```
+
+### What starts up (all free):
+
+| Service | URL | Credentials |
+|---------|-----|-------------|
+| Auth Service | http://localhost:3001 | - |
+| Order Service | http://localhost:3002 | - |
+| Payment Service | http://localhost:3003 | - |
+| Analytics Service | http://localhost:3004 | - |
+| Prometheus | http://localhost:9090 | - |
+| Grafana | http://localhost:3000 | admin / admin |
+| OpenSearch Dashboards | http://localhost:5601 | - |
+| LocalStack (AWS) | http://localhost:4566 | - |
+| PostgreSQL | localhost:5432 | cloudscale_admin / localdev123 |
+
+### Try It
+
+```bash
+# Register a user
+curl -X POST http://localhost:3001/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"demo@test.com","password":"password123"}'
+
+# Login (copy the token from the response)
+curl -X POST http://localhost:3001/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"demo@test.com","password":"password123"}'
+
+# Create an order (replace TOKEN)
+curl -X POST http://localhost:3002/api/orders \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer TOKEN" \
+  -d '{"items":[{"name":"Widget","qty":2}],"total":29.99}'
+
+# Send an analytics event (replace TOKEN)
+curl -X POST http://localhost:3004/api/events \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer TOKEN" \
+  -d '{"event_type":"page_view","source":"web","payload":{"page":"/home"}}'
+
+# Check Prometheus metrics
+curl http://localhost:3001/metrics
+```
+
+### Stop Everything
+
+```powershell
+.\scripts\stop-local.ps1
+# or
+cd docker && docker-compose down
+```
+
 ## Project Structure
 
 ```
 cloud-scale/
-├── services/                    # Microservice source code
-│   ├── auth-service/
-│   ├── order-service/
-│   ├── payment-service/
-│   └── analytics-service/
-├── docker/                      # Dockerfiles
-├── kubernetes/manifests/        # Raw K8s manifests
+├── services/                    # Microservice source code (Node.js)
+│   ├── auth-service/            #   JWT auth, registration, login
+│   ├── order-service/           #   Order CRUD, status management
+│   ├── payment-service/         #   Payment processing
+│   └── analytics-service/       #   Event ingestion, Kinesis streaming
+├── docker/                      # Dockerfiles + docker-compose (local stack)
+├── kubernetes/manifests/        # K8s manifests (for Minikube)
 ├── helm/                        # Helm charts per service
-├── terraform/                   # IaC modules
-│   ├── vpc/                     # VPC, subnets, NAT, IGW
-│   ├── eks/                     # EKS cluster + node groups
-│   ├── rds/                     # RDS PostgreSQL
-│   ├── s3/                      # S3 buckets (data lake)
-│   ├── kinesis/                 # Kinesis data stream
-│   └── ecr/                     # ECR repositories
-├── ci-cd/                       # CI/CD pipelines
-│   ├── .github/workflows/       # GitHub Actions
-│   └── argocd/                  # ArgoCD application manifests
-├── observability/               # Monitoring & logging
-│   ├── prometheus/
-│   ├── grafana/
-│   ├── fluentbit/
-│   └── opensearch/
+├── terraform/                   # IaC modules (runs on LocalStack)
+│   ├── vpc/                     # VPC, subnets, NAT, IGW (reference)
+│   ├── eks/                     # EKS cluster + node groups (reference)
+│   ├── rds/                     # RDS PostgreSQL (reference)
+│   ├── s3/                      # S3 buckets ← runs locally
+│   ├── kinesis/                 # Kinesis stream ← runs locally
+│   └── ecr/                     # ECR repositories (reference)
+├── ci-cd/                       # CI/CD pipelines (free GitHub Actions)
+│   ├── .github/workflows/       #   Lint, test, build (no AWS needed)
+│   └── argocd/                  #   ArgoCD manifests (reference)
+├── observability/               # Monitoring & logging (all free)
+│   ├── prometheus/              #   Metrics collection
+│   ├── grafana/                 #   Dashboards
+│   ├── fluentbit/               #   Log shipping
+│   └── opensearch/              #   Log storage & search
 ├── data-pipeline/               # Data engineering
-│   ├── lambda/
-│   ├── kinesis/
-│   └── athena/
-└── docs/
+│   ├── lambda/                  #   Event processor (Python)
+│   ├── kinesis/                 #   Stream config
+│   └── athena/                  #   SQL analytics queries
+├── scripts/                     # Startup & test scripts
+└── docs/                        # Architecture & deployment docs
 ```
 
-## Prerequisites
+## Technology Stack
 
-- AWS CLI v2 configured with appropriate IAM credentials
-- Terraform >= 1.5
-- kubectl >= 1.28
-- Helm >= 3.12
-- Docker >= 24.0
-- Node.js >= 20 LTS
+| Layer | Technology | Cost |
+|-------|-----------|------|
+| Microservices | Node.js + Express | Free |
+| Database | PostgreSQL (Docker) | Free |
+| AWS Emulation | LocalStack | Free |
+| Container Runtime | Docker Desktop | Free |
+| Local Kubernetes | Minikube | Free |
+| IaC | Terraform → LocalStack | Free |
+| CI/CD | GitHub Actions (free tier) | Free |
+| Metrics | Prometheus + Grafana | Free |
+| Logs | FluentBit + OpenSearch | Free |
+| Data Pipeline | Kinesis + Lambda (LocalStack) | Free |
 
-## Quick Start
+## Kubernetes (Minikube)
 
-### 1. Provision Infrastructure
-
-```bash
-cd terraform/vpc && terraform init && terraform apply
-cd ../eks && terraform init && terraform apply
-cd ../rds && terraform init && terraform apply
-cd ../s3 && terraform init && terraform apply
-cd ../kinesis && terraform init && terraform apply
-cd ../ecr && terraform init && terraform apply
-```
-
-### 2. Configure kubectl
+For the full K8s experience locally:
 
 ```bash
-aws eks update-kubeconfig --name cloudscale-cluster --region us-east-1
-```
+# Install Minikube (free)
+# Windows: choco install minikube
+# Mac: brew install minikube
+# Linux: curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
 
-### 3. Build & Push Docker Images
+minikube start --memory=4096 --cpus=2
 
-```bash
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
+# Build images inside Minikube
+eval $(minikube docker-env)
+docker build -f docker/Dockerfile.auth-service -t cloudscale/auth-service:latest .
+docker build -f docker/Dockerfile.order-service -t cloudscale/order-service:latest .
+docker build -f docker/Dockerfile.payment-service -t cloudscale/payment-service:latest .
+docker build -f docker/Dockerfile.analytics-service -t cloudscale/analytics-service:latest .
 
-for svc in auth-service order-service payment-service analytics-service; do
-  docker build -f docker/Dockerfile.${svc} -t ${svc}:latest services/${svc}/
-  docker tag ${svc}:latest <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/${svc}:latest
-  docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/${svc}:latest
-done
-```
-
-### 4. Deploy with Helm
-
-```bash
+# Deploy with Helm
+kubectl apply -f kubernetes/manifests/namespace.yaml
 for chart in auth-chart order-chart payment-chart analytics-chart; do
-  helm upgrade --install ${chart} helm/${chart}/ -n cloudscale --create-namespace
+  helm upgrade --install ${chart} helm/${chart}/ -n cloudscale
 done
+
+# Access services
+minikube service auth-service -n cloudscale
 ```
 
-### 5. Deploy Observability Stack
+## CI/CD Pipeline (Free)
 
-```bash
-kubectl apply -f observability/prometheus/
-kubectl apply -f observability/grafana/
-kubectl apply -f observability/fluentbit/
-kubectl apply -f observability/opensearch/
-```
+Push to GitHub and the pipeline runs automatically:
 
-## CI/CD Pipeline Stages
+1. **Lint** – ESLint (code) + Hadolint (Dockerfiles)
+2. **Test** – Jest with PostgreSQL service container
+3. **Build** – Docker image build verification
+4. **Validate** – Terraform format & validate
 
-1. **Lint** – ESLint + Hadolint
-2. **Unit Test** – Jest test suites
-3. **Build** – Docker image build
-4. **Push** – Push to Amazon ECR
-5. **Terraform** – Infrastructure apply
-6. **Deploy** – Helm upgrade via ArgoCD
+No AWS credentials or paid services needed.
 
 ## License
 
