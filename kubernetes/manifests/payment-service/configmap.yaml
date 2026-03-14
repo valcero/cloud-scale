@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: payment-service-config
+  namespace: cloudscale
+  labels:
+    app: payment-service
+data:
+  PORT: "3003"
+  DB_PORT: "5432"
+  DB_NAME: "cloudscale"
+  DB_SSL: "true"
+  LOG_LEVEL: "info"

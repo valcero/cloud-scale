@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudscale
+  labels:
+    app.kubernetes.io/part-of: cloudscale
+    istio-injection: enabled

@@ -1,0 +1,99 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "Service Status",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "count(up{kubernetes_namespace=\"cloudscale\"} == 1)",
+          "legendFormat": "Healthy Pods"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 4 },
+              { "color": "green", "value": 8 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Request Rate (per service)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{kubernetes_namespace=\"cloudscale\"}[5m])) by (kubernetes_pod_name)",
+          "legendFormat": "{{ kubernetes_pod_name }}"
+        }
+      ]
+    },
+    {
+      "title": "Error Rate (5xx)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{status=~\"5..\", kubernetes_namespace=\"cloudscale\"}[5m])) by (kubernetes_pod_name)",
+          "legendFormat": "{{ kubernetes_pod_name }}"
+        }
+      ]
+    },
+    {
+      "title": "CPU Usage",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        {
+          "expr": "rate(process_cpu_seconds_total{kubernetes_namespace=\"cloudscale\"}[5m])",
+          "legendFormat": "{{ kubernetes_pod_name }}"
+        }
+      ]
+    },
+    {
+      "title": "Memory Usage (MB)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        {
+          "expr": "process_resident_memory_bytes{kubernetes_namespace=\"cloudscale\"} / 1024 / 1024",
+          "legendFormat": "{{ kubernetes_pod_name }}"
+        }
+      ]
+    },
+    {
+      "title": "Response Time P99 (seconds)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 20 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{kubernetes_namespace=\"cloudscale\"}[5m])) by (le, kubernetes_pod_name))",
+          "legendFormat": "{{ kubernetes_pod_name }}"
+        }
+      ]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["cloudscale", "overview"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "CloudScale Platform Overview",
+  "uid": "cloudscale-overview",
+  "version": 1
+}

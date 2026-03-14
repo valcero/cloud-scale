@@ -1,0 +1,49 @@
+replicaCount: 3
+
+image:
+  repository: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cloudscale/payment-service
+  tag: latest
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3003
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+config:
+  PORT: "3003"
+  DB_PORT: "5432"
+  DB_NAME: "cloudscale"
+  DB_SSL: "true"
+  LOG_LEVEL: "info"
+
+secrets:
+  DB_HOST: "REPLACE_WITH_DB_HOST"
+  DB_USER: "REPLACE_WITH_DB_USER"
+  DB_PASSWORD: "REPLACE_WITH_DB_PASSWORD"
+  JWT_SECRET: "REPLACE_WITH_JWT_SECRET"
+
+healthCheck:
+  liveness:
+    path: /health/live
+    port: 3003
+  readiness:
+    path: /health/ready
+    port: 3003
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "3003"

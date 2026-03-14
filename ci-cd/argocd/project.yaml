@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: cloudscale
+  namespace: argocd
+spec:
+  description: CloudScale Production Platform
+  sourceRepos:
+    - https://github.com/YOUR_ORG/cloud-scale.git
+  destinations:
+    - namespace: cloudscale
+      server: https://kubernetes.default.svc
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceBlacklist:
+    - group: ""
+      kind: ResourceQuota
+    - group: ""
+      kind: LimitRange
+  roles:
+    - name: admin
+      description: Admin access to CloudScale project
+      policies:
+        - p, proj:cloudscale:admin, applications, *, cloudscale/*, allow
+      groups:
+        - cloudscale-admins

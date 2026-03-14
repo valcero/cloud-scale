@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: analytics-service-config
+  namespace: cloudscale
+  labels:
+    app: analytics-service
+data:
+  PORT: "3004"
+  DB_PORT: "5432"
+  DB_NAME: "cloudscale"
+  DB_SSL: "true"
+  LOG_LEVEL: "info"
+  AWS_REGION: "us-east-1"
+  KINESIS_STREAM_NAME: "cloudscale-events-production"

@@ -1,0 +1,48 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: CloudScale Event Processor Lambda
+
+Globals:
+  Function:
+    Timeout: 60
+    MemorySize: 256
+    Runtime: python3.12
+
+Resources:
+  EventProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: cloudscale-event-processor
+      Handler: index.lambda_handler
+      CodeUri: .
+      Description: Processes events from Kinesis and writes to S3 data lake
+      Environment:
+        Variables:
+          DATA_LAKE_BUCKET: cloudscale-data-lake-production
+      Policies:
+        - S3WritePolicy:
+            BucketName: cloudscale-data-lake-production
+        - KinesisStreamReadPolicy:
+            StreamName: cloudscale-events-production
+      Events:
+        KinesisEvent:
+          Type: Kinesis
+          Properties:
+            Stream: !Sub arn:aws:kinesis:${AWS::Region}:${AWS::AccountId}:stream/cloudscale-events-production
+            StartingPosition: LATEST
+            BatchSize: 100
+            MaximumBatchingWindowInSeconds: 30
+            MaximumRetryAttempts: 3
+            BisectBatchOnFunctionError: true
+            ParallelizationFactor: 10
+
+  EventProcessorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${EventProcessorFunction}
+      RetentionInDays: 30
+
+Outputs:
+  EventProcessorArn:
+    Description: Event Processor Lambda ARN
+    Value: !GetAtt EventProcessorFunction.Arn

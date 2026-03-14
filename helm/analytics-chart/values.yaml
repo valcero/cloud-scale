@@ -1,0 +1,54 @@
+replicaCount: 3
+
+image:
+  repository: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cloudscale/analytics-service
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3004
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 15
+  targetCPUUtilizationPercentage: 65
+  targetMemoryUtilizationPercentage: 75
+
+config:
+  PORT: "3004"
+  DB_PORT: "5432"
+  DB_NAME: "cloudscale"
+  DB_SSL: "true"
+  LOG_LEVEL: "info"
+  AWS_REGION: "us-east-1"
+  KINESIS_STREAM_NAME: "cloudscale-events-production"
+
+secrets:
+  DB_HOST: "REPLACE_WITH_DB_HOST"
+  DB_USER: "REPLACE_WITH_DB_USER"
+  DB_PASSWORD: "REPLACE_WITH_DB_PASSWORD"
+  JWT_SECRET: "REPLACE_WITH_JWT_SECRET"
+
+healthCheck:
+  liveness:
+    path: /health/live
+    port: 3004
+  readiness:
+    path: /health/ready
+    port: 3004
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "3004"
+  prometheus.io/path: "/metrics"

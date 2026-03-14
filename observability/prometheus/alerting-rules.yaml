@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: monitoring
+data:
+  cloudscale-alerts.yml: |
+    groups:
+      - name: cloudscale.service.alerts
+        rules:
+          - alert: ServiceDown
+            expr: up{kubernetes_namespace="cloudscale"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Service {{ $labels.kubernetes_pod_name }} is down"
+              description: "{{ $labels.kubernetes_pod_name }} has been unreachable for 1 minute."
+
+          - alert: HighCPUUsage
+            expr: rate(process_cpu_seconds_total{kubernetes_namespace="cloudscale"}[5m]) > 0.8
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High CPU usage on {{ $labels.kubernetes_pod_name }}"
+
+          - alert: HighMemoryUsage
+            expr: process_resident_memory_bytes{kubernetes_namespace="cloudscale"} / 1024 / 1024 > 400
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High memory usage on {{ $labels.kubernetes_pod_name }}"
+
+          - alert: HighErrorRate
+            expr: rate(http_requests_total{status=~"5..", kubernetes_namespace="cloudscale"}[5m]) / rate(http_requests_total{kubernetes_namespace="cloudscale"}[5m]) > 0.05
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "High 5xx error rate on {{ $labels.kubernetes_pod_name }}"
+
+          - alert: HighLatency
+            expr: histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{kubernetes_namespace="cloudscale"}[5m])) > 2
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "P99 latency above 2s on {{ $labels.kubernetes_pod_name }}"
+
+      - name: cloudscale.infrastructure.alerts
+        rules:
+          - alert: PodCrashLooping
+            expr: rate(kube_pod_container_status_restarts_total{namespace="cloudscale"}[15m]) > 0
+            for: 15m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Pod {{ $labels.pod }} is crash looping"
+
+          - alert: PodNotReady
+            expr: kube_pod_status_ready{namespace="cloudscale", condition="true"} == 0
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{ $labels.pod }} is not ready"

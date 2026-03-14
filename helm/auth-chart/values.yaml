@@ -1,0 +1,72 @@
+replicaCount: 3
+
+image:
+  repository: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cloudscale/auth-service
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3001
+
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+  hosts:
+    - host: api.cloudscale.example.com
+      paths:
+        - path: /api/auth
+          pathType: Prefix
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+config:
+  PORT: "3001"
+  DB_PORT: "5432"
+  DB_NAME: "cloudscale"
+  DB_SSL: "true"
+  JWT_EXPIRY: "24h"
+  LOG_LEVEL: "info"
+
+secrets:
+  DB_HOST: "REPLACE_WITH_RDS_ENDPOINT"
+  DB_USER: "REPLACE_WITH_DB_USER"
+  DB_PASSWORD: "REPLACE_WITH_DB_PASSWORD"
+  JWT_SECRET: "REPLACE_WITH_JWT_SECRET"
+
+healthCheck:
+  liveness:
+    path: /health/live
+    port: 3001
+    initialDelaySeconds: 15
+    periodSeconds: 20
+  readiness:
+    path: /health/ready
+    port: 3001
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+nodeSelector: {}
+tolerations: []
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "3001"
+  prometheus.io/path: "/metrics"
